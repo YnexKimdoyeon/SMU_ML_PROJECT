@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>알약 이미지 분리</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 40px; }
+    .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    h1 { color: #d94f70; }
+    button { padding: 10px 20px; background: #0078d4; color: white; border: none; border-radius: 6px; cursor: pointer; margin-top: 10px; }
+    input[type="file"] { margin-top: 10px; }
+    #result { margin-top: 20px; white-space: pre-wrap; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>알약 이미지 업로드</h1>
+    <form id="uploadForm">
+      <input type="file" id="fileInput" name="file" accept="image/*" required><br>
+      <button type="submit">업로드</button>
+    </form>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    document.getElementById("uploadForm").addEventListener("submit", async function(e) {
+      e.preventDefault();
+      const file = document.getElementById("fileInput").files[0];
+      if (!file) return alert("파일을 선택하세요");
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/upload", {
+        method: "POST",
+        body: formData
+      });
+
+      const data = await res.json();
+      let output = data.message + "\n\n";
+      for (const pill of data.results) {
+        output += `📦 ${pill.file}\n🧾 텍스트: ${pill.text}\n\n`;
+      }
+      document.getElementById("result").innerText = output;
+    });
+  </script>
+</body>
+</html>
