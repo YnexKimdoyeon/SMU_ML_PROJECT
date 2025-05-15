@@ -8,21 +8,19 @@ from bs4 import BeautifulSoup
 driver = webdriver.Chrome()
 driver.get("https://www.health.kr/interaction/drug.asp")
 driver.implicitly_wait(5)
+start = int(input("시작값 : "))
+end = int(input("종료값 : "))
 with open ("file.txt", "r",encoding="UTF-8") as f:
     alist = f.readlines()
-for Number,j in enumerate(alist):
+for j in range(start, end):
     print(j)
     try:
-        driver.execute_script(j)
+        driver.execute_script(alist[j])
     except:
         print("error")
-        input()
     time.sleep(0.1)
-    if Number == 1000:
-        print("브렉")
-        break
 
-input()
+driver.execute_script('searchProduct();')
 print("추출시작")
 
 html = driver.page_source
