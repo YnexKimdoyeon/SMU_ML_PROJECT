@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import time
 
-MAX_WORKERS = 100
+MAX_WORKERS = 50
 SAVE_EVERY = 1000
 BATCH_SIZE = 5000
 EXCEL_FILENAME = "drug_interactions_partial.xlsx"
@@ -57,7 +57,7 @@ def check_interaction(drug1, drug2, retries=2):
 
     for attempt in range(retries):
         try:
-            response = requests.post(url, data=data, headers=headers, timeout=5)
+            response = requests.post(url, data=data, headers=headers, timeout=10)
             if response.status_code != 200:
                 print(f"❌ 응답 오류 {response.status_code} - {one_name} + {two_name}")
                 return None
