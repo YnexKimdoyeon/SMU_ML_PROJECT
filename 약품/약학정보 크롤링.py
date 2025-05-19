@@ -19,7 +19,7 @@ for j in range(start, end):
     except:
         print("error")
     time.sleep(0.1)
-
+time.sleep(1000)
 driver.execute_script('searchProduct();')
 print("추출시작")
 
