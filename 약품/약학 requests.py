@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import time
 
-MAX_WORKERS = 30
+MAX_WORKERS = 100
 SAVE_EVERY = 1000
 BATCH_SIZE = 5000
 EXCEL_FILENAME = "drug_interactions_partial.xlsx"
