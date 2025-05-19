@@ -6,18 +6,21 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import time
 
+# 설정
 MAX_WORKERS = 50
 SAVE_EVERY = 1000
 BATCH_SIZE = 5000
-EXCEL_FILENAME = "drug_interactions_partial.xlsx"
+CSV_FILENAME = "drug_interactions_partial.csv"
 COMPLETE_LOG = "completed_pairs.txt"
 
+# 정규식으로 코드/이름 추출
 def return_match(text):
     match = re.search(r'selectAdd\("([^"]+)","([^"]+)","([^"]+)"\)', text)
     if match:
         return match.group(1), match.group(2), match.group(3)
     return None, None, None
 
+# 요청 헤더
 url = "https://www.health.kr/interaction/drug.asp"
 headers = {
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -25,15 +28,18 @@ headers = {
     "referer": "https://www.health.kr/interaction/drug.asp"
 }
 
+# 데이터 로딩
 with open("file.txt", "r", encoding="utf-8") as f:
     lines = [line.strip() for line in f.readlines()]
 drug_list = [return_match(line) for line in lines if return_match(line)[0]]
 
+# 완료된 조합 로딩
 completed = set()
 if os.path.exists(COMPLETE_LOG):
     with open(COMPLETE_LOG, "r", encoding="utf-8") as f:
         completed = set(line.strip() for line in f.readlines())
 
+# 상호작용 확인 함수
 def check_interaction(drug1, drug2, retries=2):
     one_index, one_code, one_name = drug1
     two_index, two_code, two_name = drug2
@@ -103,17 +109,19 @@ def check_interaction(drug1, drug2, retries=2):
         "key": key
     }
 
+# CSV 저장 함수
 def save_results(batch_results):
     df = pd.DataFrame(batch_results)
-    if os.path.exists(EXCEL_FILENAME):
-        old = pd.read_excel(EXCEL_FILENAME, engine="openpyxl")
+    if os.path.exists(CSV_FILENAME):
+        old = pd.read_csv(CSV_FILENAME, encoding="utf-8-sig")
         df = pd.concat([old, df], ignore_index=True)
-    df.to_excel(EXCEL_FILENAME, index=False, engine="openpyxl")
+    df.to_csv(CSV_FILENAME, index=False, encoding="utf-8-sig")
 
     with open(COMPLETE_LOG, "a", encoding="utf-8") as f:
         for r in batch_results:
             f.write(r["key"] + "\n")
 
+# 조합 만들기
 all_pairs = [
     (drug_list[i], drug_list[j])
     for i in range(len(drug_list))
@@ -123,6 +131,7 @@ all_pairs = [
 
 print(f"🔍 총 처리 대상 조합 수: {len(all_pairs)}")
 
+# 병렬 실행 및 저장 루프
 results = []
 count = 0
 for batch_start in range(0, len(all_pairs), BATCH_SIZE):
