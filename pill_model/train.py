@@ -95,7 +95,26 @@ for epoch in range(num_epochs):
 
     acc = 100 * correct / total
     print(f"[Epoch {epoch+1}] Loss: {running_loss:.4f} | Train Acc: {acc:.2f}%")
+    
+# === 검증 데이터셋 평가 ===
+model.eval()
+val_loss = 0.0
+val_correct = 0
+val_total = 0
 
+with torch.no_grad():
+    for images, labels in val_loader:
+        images = images.to(device)
+        labels = labels.to(device)
+
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+        val_loss += loss.item()
+
+        _, preds = torch.max(outputs, 1)
+        val_correct += (preds == labels).sum().item()
+        val_total += labels.size(0)
+        
 # === 모델 저장 ===
 torch.save(model.state_dict(), "pill_resnet152.pth")
 print("✅ 학습 완료 및 모델 저장 완료")
