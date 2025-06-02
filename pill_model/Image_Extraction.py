@@ -1,48 +1,66 @@
 import os
 import zipfile
+from collections import defaultdict
 
-# 1. ZIP 파일 경로 (TS_81_단일.zip)
-zip_path = r"C:\Users\hotse\Downloads\166.약품식별 인공지능 개발을 위한 경구약제 이미지 데이터\01.데이터\1.Training\원천데이터\단일경구약제 5000종\TS_81_단일.zip"
-
-# 2. 추출된 이미지 저장 폴더
-output_dir = os.path.join(os.path.dirname(zip_path), "filtered_images")
+# ✅ 설정
+base_dir = r"C:\Users\hotse\Downloads\166.약품식별 인공지능 개발을 위한 경구약제 이미지 데이터\01.데이터\1.Training\원천데이터\단일경구약제 5000종"
+output_dir = os.path.join(base_dir, "filtered_images")
 os.makedirs(output_dir, exist_ok=True)
 
-# 3. 조건 설정
-TARGET_BG_IDX = "2"             # 배경색 index 고정
-TARGET_LIGHT = ("60", "160")    # 조도 조건
-ALLOWED_ROT_IDX = {"0", "1", "2", "3"}  # 회전 인덱스
+ALLOWED_EXT = {".jpg", ".png"}  # 확장자 제한
+MAX_PER_PILL = 2  # 약제당 최대 추출 수
 
-# 4. 압축 파일 열기
-with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-    for fname in zip_ref.namelist():
-        if not (fname.endswith(".png") or fname.endswith(".jpg")):
-            continue
+# ✅ 유효 파일 여부 검사 (조건 최소화)
+def is_valid_filename(fname):
+    base_name = os.path.basename(fname)
+    name, ext = os.path.splitext(base_name)
+    if ext.lower() not in ALLOWED_EXT:
+        return False
 
-        try:
-            # ZIP 내부의 경로: ex) K-038890/K-038890_0_2_1_0_60_160_200.png
+    parts = name.split("_")
+    if len(parts) < 8:
+        return False  # 기본 구조는 유지
+
+    return True
+
+# ✅ ZIP 반복 처리
+for i in range(81, 82):  # 1 ~ 81
+    zip_name = f"TS_{i}_단일.zip"
+    zip_path = os.path.join(base_dir, zip_name)
+
+    if not os.path.exists(zip_path):
+        print(f"[!] {zip_name} 없음. 건너뜀.")
+        continue
+
+    print(f"📦 {zip_name} 처리 중...")
+
+    pill_image_count = defaultdict(int)
+    valid_image_map = defaultdict(list)
+
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        for fname in zip_ref.namelist():
             base_name = os.path.basename(fname)
-            parts = base_name.split("_")
-
-            if len(parts) < 8:
+            if not is_valid_filename(fname):
                 continue
 
-            bg_idx = parts[2]
-            light_la = parts[5]
-            light_lo = parts[6]
-            rot_idx = parts[4]
+            pill_code = base_name.split("_")[0]
+            valid_image_map[pill_code].append(base_name)
 
-            if (
-                bg_idx == TARGET_BG_IDX and
-                (light_la, light_lo) == TARGET_LIGHT and
-                rot_idx in ALLOWED_ROT_IDX
-            ):
+            if pill_image_count[pill_code] >= MAX_PER_PILL:
+                continue
+
+            try:
                 out_path = os.path.join(output_dir, base_name)
                 if not os.path.exists(out_path):
                     with zip_ref.open(fname) as src, open(out_path, "wb") as dst:
                         dst.write(src.read())
+                    pill_image_count[pill_code] += 1
+            except Exception as e:
+                print(f"[!] {fname} 처리 오류: {e}")
 
-        except Exception as e:
-            print(f"[!] {fname} 처리 오류: {e}")
+    # ✅ 로그 출력
+    print(f"🔍 {zip_name} 약제별 추출 현황:")
+    for pill_code, images in valid_image_map.items():
+        print(f"  - {pill_code}: 조건 만족 {len(images)}장, 추출 {pill_image_count[pill_code]}장")
 
-print(f"✅ 조건을 만족하는 이미지 추출 완료 → {output_dir}")
+print(f"\n✅ 전체 완료! 추출된 이미지 저장 위치:\n→ {output_dir}")
