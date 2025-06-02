@@ -1,13 +1,10 @@
 import os
 import pandas as pd
 from PIL import Image
-from sklearn.model_selection import train_test_split
-
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torchvision import models, transforms
-
 
 # === 사용자 정의 Dataset ===
 class PillDataset(Dataset):
@@ -21,57 +18,69 @@ class PillDataset(Dataset):
         return len(self.dataframe)
 
     def __getitem__(self, idx):
-        img_name = self.dataframe.iloc[idx]["filename"]
-        label_name = self.dataframe.iloc[idx]["label"]
-        img_path = os.path.join(self.image_dir, img_name)
+        row = self.dataframe.iloc[idx]
+        img_path = os.path.join(self.image_dir, row["filename"])
+        label = self.label2id[row["label"]]
 
-        image = Image.open(img_path).convert("RGB")
+        try:
+            image = Image.open(img_path).convert("RGB")
+        except FileNotFoundError:
+            print(f"[경고] 이미지 없음: {img_path}")
+            return None  # DataLoader에서 collate_fn으로 무시할 수 있음
+
         if self.transform:
             image = self.transform(image)
 
-        label = self.label2id[label_name]
         return image, label
 
-# === 경로 설정 ===
-csv_path = "labels_existing_filtered.csv"
-df = pd.read_csv(csv_path, encoding="utf-8-sig")  # 한글 깨짐 방지
+# === collate_fn: None 제거
+def safe_collate(batch):
+    batch = [x for x in batch if x is not None]
+    return torch.utils.data.dataloader.default_collate(batch)
+
+# === 경로 설정
 image_dir = r"C:\Users\hotse\Downloads\166.약품식별 인공지능 개발을 위한 경구약제 이미지 데이터\01.데이터\1.Training\원천데이터\단일경구약제 5000종\filtered_images"
+train_csv = "train_labels.csv"
+val_csv = "val_labels.csv"
 
-# === CSV 로드 및 클래스 인덱싱 ===
-df = pd.read_csv(csv_path)
-class_names = sorted(df["label"].unique())
-label2id = {name: idx for idx, name in enumerate(class_names)}
-num_classes = len(class_names)
+# === CSV 로드
+df_train = pd.read_csv(train_csv, encoding="utf-8-sig")
+df_val = pd.read_csv(val_csv, encoding="utf-8-sig")
 
-# === 데이터 분할 ===
-df_train, df_val = train_test_split(df, test_size=0.2, stratify=df["label"], random_state=42)
+# === 라벨 인덱싱
+class_names = sorted(pd.concat([df_train, df_val])["label"].unique())
+label2id = {label: idx for idx, label in enumerate(class_names)}
+num_classes = len(label2id)
 
-# === 전처리 ===
+# === 전처리 정의
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    transforms.Normalize([0.485, 0.456, 0.406],
+                         [0.229, 0.224, 0.225])
 ])
 
-# === Dataset 및 Dataloader 생성 ===
+# === Dataset, Dataloader
 train_dataset = PillDataset(df_train, image_dir, label2id, transform)
 val_dataset = PillDataset(df_val, image_dir, label2id, transform)
 
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, collate_fn=safe_collate)
+val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, collate_fn=safe_collate)
 
-# === 모델 정의 ===
+# === 모델 정의
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = models.resnet152(weights=models.ResNet152_Weights.IMAGENET1K_V1)
 model.fc = nn.Linear(model.fc.in_features, num_classes)
 model = model.to(device)
 
-# === 손실함수 및 옵티마이저 ===
+# === 손실함수, 옵티마이저
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
-# === 학습 루프 ===
+# === 학습 루프
 num_epochs = 10
+best_val_acc = 0.0
+
 for epoch in range(num_epochs):
     model.train()
     running_loss = 0.0
@@ -79,8 +88,7 @@ for epoch in range(num_epochs):
     total = 0
 
     for images, labels in train_loader:
-        images = images.to(device)
-        labels = labels.to(device)
+        images, labels = images.to(device), labels.to(device)
 
         optimizer.zero_grad()
         outputs = model(images)
@@ -93,28 +101,34 @@ for epoch in range(num_epochs):
         correct += (preds == labels).sum().item()
         total += labels.size(0)
 
-    acc = 100 * correct / total
-    print(f"[Epoch {epoch+1}] Loss: {running_loss:.4f} | Train Acc: {acc:.2f}%")
-    
-# === 검증 데이터셋 평가 ===
-model.eval()
-val_loss = 0.0
-val_correct = 0
-val_total = 0
+    train_acc = 100 * correct / total
+    print(f"[Epoch {epoch+1}] Train Loss: {running_loss:.4f} | Train Acc: {train_acc:.2f}%")
 
-with torch.no_grad():
-    for images, labels in val_loader:
-        images = images.to(device)
-        labels = labels.to(device)
+    # === 검증
+    model.eval()
+    val_loss = 0.0
+    val_correct = 0
+    val_total = 0
 
-        outputs = model(images)
-        loss = criterion(outputs, labels)
-        val_loss += loss.item()
+    with torch.no_grad():
+        for images, labels in val_loader:
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            val_loss += loss.item()
+            _, preds = torch.max(outputs, 1)
+            val_correct += (preds == labels).sum().item()
+            val_total += labels.size(0)
 
-        _, preds = torch.max(outputs, 1)
-        val_correct += (preds == labels).sum().item()
-        val_total += labels.size(0)
-        
-# === 모델 저장 ===
-torch.save(model.state_dict(), "pill_resnet152.pth")
-print("✅ 학습 완료 및 모델 저장 완료")
+    val_acc = 100 * val_correct / val_total
+    print(f"          → Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.2f}%")
+
+    # === best 모델 저장
+    if val_acc > best_val_acc:
+        best_val_acc = val_acc
+        torch.save(model.state_dict(), "pill_resnet152_best.pth")
+        print(f"✅ Best model saved! (Val Acc: {val_acc:.2f}%)")
+
+# === 최종 저장
+torch.save(model.state_dict(), "pill_resnet152_final.pth")
+print("✅ 최종 모델 저장 완료")

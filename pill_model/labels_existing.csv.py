@@ -26,27 +26,35 @@ for i in range(1, 82):
 
     # 1. 원천 ZIP 안의 이미지 이름 목록 추출
     image_name_set = set()
-    with zipfile.ZipFile(image_zip_path, 'r') as izip:
-        for fname in izip.namelist():
-            if fname.endswith(".png") or fname.endswith(".jpg"):
-                image_name_set.add(os.path.basename(fname))
+    try:
+        with zipfile.ZipFile(image_zip_path, 'r') as izip:
+            for fname in izip.namelist():
+                if fname.endswith(".png") or fname.endswith(".jpg"):
+                    image_name_set.add(os.path.basename(fname))
+    except zipfile.BadZipFile:
+        print(f"[!] 원천 ZIP 손상됨 (BadZipFile): {image_zip_path} → 스킵")
+        continue
 
     # 2. 라벨 ZIP 안의 JSON에서 image_name → dl_name 추출
-    with zipfile.ZipFile(label_zip_path, 'r') as lzip:
-        for fname in lzip.namelist():
-            if fname.endswith(".json"):
-                try:
-                    with lzip.open(fname) as f:
-                        data = json.load(f)
-                        image_info = data.get("images", [{}])[0]
-                        file_name = image_info.get("file_name", "")
-                        label = image_info.get("dl_name", "")
+    try:
+        with zipfile.ZipFile(label_zip_path, 'r') as lzip:
+            for fname in lzip.namelist():
+                if fname.endswith(".json"):
+                    try:
+                        with lzip.open(fname) as f:
+                            data = json.load(f)
+                            image_info = data.get("images", [{}])[0]
+                            file_name = image_info.get("file_name", "")
+                            label = image_info.get("dl_name", "")
 
-                        # 실제 이미지가 존재할 경우만 포함
-                        if file_name in image_name_set:
-                            results.append((file_name, label))
-                except Exception as e:
-                    print(f"[!] JSON 읽기 실패 ({fname}): {e}")
+                            # 실제 이미지가 존재할 경우만 포함
+                            if file_name in image_name_set:
+                                results.append((file_name, label))
+                    except Exception as e:
+                        print(f"[!] JSON 읽기 실패 ({fname}): {e}")
+    except zipfile.BadZipFile:
+        print(f"[!] 라벨 ZIP 손상됨 (BadZipFile): {label_zip_path} → 스킵")
+        continue
 
 print(f"총 유효한 항목 수: {len(results)}")
 
