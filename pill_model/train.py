@@ -19,17 +19,26 @@ class PillDataset(Dataset):
 
     def __getitem__(self, idx):
         row = self.dataframe.iloc[idx]
-        img_path = os.path.join(self.image_dir, row["filename"])
-        label = self.label2id[row["label"]]
+        filename = row["filename"]
+        label_name = row["label"]
+
+        if filename not in os.listdir(self.image_dir):
+            print(f"[파일 없음] {filename}")
 
         try:
+            img_path = os.path.join(self.image_dir, filename)
             image = Image.open(img_path).convert("RGB")
-        except FileNotFoundError:
-            print(f"[경고] 이미지 없음: {img_path}")
-            return None  # DataLoader에서 collate_fn으로 무시할 수 있음
+        except Exception as e:
+            print(f"[에러] 이미지 로드 실패: {img_path} | 예외: {e}")
+            return None
 
         if self.transform:
             image = self.transform(image)
+
+        label = self.label2id.get(label_name)
+        if label is None:
+            print(f"[경고] 라벨 매핑 실패: {label_name}")
+            return None
 
         return image, label
 

@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 # CSV 로드
-df = pd.read_csv("labels_existing_filtered.csv", encoding="utf-8-sig")
+df = pd.read_csv("labels_existing.csv", encoding="utf-8-sig")
 
 # 클래스당 최소 2개 이상 유지
 counts = df["label"].value_counts()
