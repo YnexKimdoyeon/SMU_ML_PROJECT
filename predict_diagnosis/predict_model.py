@@ -63,7 +63,6 @@ def predict_diagnosis(model, atc_list, device='cpu'):
         pred_class = torch.argmax(probs, dim=1).item()
     return index_to_label[str(pred_class)], probs.squeeze().tolist()
 
-# 사용 예시
 if __name__ == '__main__':
     atc_input = ["A02BC01", "C09AA05", "N06AB10"]  # 사용자 입력
     model = load_model("trained_transformer_model.pth", device="cpu")
